@@ -1,3 +1,8 @@
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.Random;
 
@@ -5,21 +10,30 @@ import java.util.Random;
 
 public class Gost28195Reliability {
 
-    // Задаем входные данные
-    static final int Q = 5;                    // число отказов
-    static final int N = 1000;                 // число экспериментов
-    static final double TV_MIN = 0.7;          // нижняя граница Tv
-    static final double TV_MAX = 1.2;          // верхняя граница Tv
-    static final double TV_DOP = 0.85;         // допустимое время восстановления
-    static final double TP_MIN = 9.0;          // нижняя граница времени преобразования
-    static final double TP_MAX = 14.0;         // верхняя граница
-    static final double TP_DOP = 12.0;         // допустимое время преобразования
-    static final double BASE = 0.95;           // базовое значение критериев
-    static final int SAMPLE_TV = 100;          // размер выборки Tv
-    static final int SAMPLE_TP = 200;          // размер выборки Tp
-
     public static void main(String[] args) {
         Locale.setDefault(Locale.US);
+        // Чтение чисел из файла
+        String fileName = (args.length > 0) ? args[0] : "gost_data.txt";
+        List<Double> nums = readNumbers(fileName);
+        if (nums == null || nums.size() < 11) {
+            System.err.println("Ошибка чтения: " + fileName);
+            return;
+        }
+
+        int idx = 0;
+        int Q = nums.get(idx++).intValue();           // число отказов
+        int N = nums.get(idx++).intValue();           // число экспериментов
+        double TV_MIN = nums.get(idx++);              // нижняя граница Tv
+        double TV_MAX = nums.get(idx++);              // верхняя граница Tv
+        double TV_DOP = nums.get(idx++);              // допустимое время восстановления
+        double TP_MIN = nums.get(idx++);              // нижняя граница Tp
+        double TP_MAX = nums.get(idx++);              // верхняя граница Tp
+        double TP_DOP = nums.get(idx++);              // допустимое время преобразования
+        double BASE = nums.get(idx++);                // базовое значение критерия
+        int SAMPLE_TV = nums.get(idx++).intValue();   // размер выборки Tv
+        int SAMPLE_TP = nums.get(idx++).intValue();   // размер выборки Tp
+
+        System.out.println("Данные из файла: " + fileName);
         Random rnd = new Random(42);
 
         // Рассчитаем оценочный элемент Н0401: вероятность безотказной работы
@@ -50,20 +64,46 @@ public class Gost28195Reliability {
         double e0502 = sumE0502 / SAMPLE_TP;
         System.out.printf("Оценка по среднему времени преобразования: Н0502 (выборка %d) = %.6f%n%n", SAMPLE_TP, e0502);
 
-        // Метрики (формула 3): среднее ОЭ (равные веса)
-        double metricWork = (e0401 + e0501 + e0502) / 3.0;
-        System.out.printf("Метрика работоспособности M = (Н0401 + Н0501 + Н0502)/3 = %.6f%n", metricWork);
+        // Метрики (формула 3)
+        // Метрика 1 — только Н0401
+        double M1 = e0401;
+        System.out.printf("Метрика M1 (по Н0401) = %.6f%n", M1);
+
+        // Метрика 2 — среднее Н0501 и Н0502 (формула 3)
+        double M2 = (e0501 + e0502) / 2.0;
+        System.out.printf("Метрика M2 (по Н0501 и Н0502) = (%.6f + %.6f)/2 = %.6f%n", e0501, e0502, M2);
 
         // Абсолютные показатели критериев (формула 4)
-        double kAbsWork = metricWork;
-        System.out.printf("Абсолютный показатель «Работоспособность» K2 = %.6f%n", kAbsWork);
+        double K = (M1 + M2) / 2.0;
+        System.out.printf("Абсолютный показатель K = (M1 + M2)/2 = %.6f%n", K);
 
         // Относительные показатели (формула 5)
-        double kRelWork = kAbsWork / BASE;
-        System.out.printf("Относительный «Работоспособность» K2/Kб = %.6f%n", kRelWork);
+        double Krel = K / BASE;
+        System.out.printf("Относительный показатель K' = K/%.2f = %.6f%n", BASE, Krel);
 
         // Фактор надёжности (формула 6)
-        double factor = (kRelWork) / 1.0;
-        System.out.printf("Фактор надёжности R = %.6f%n", factor);
+        double R = Krel*1;
+        System.out.printf("Фактор надёжности R = %.6f%n", R);
+    }
+
+    // Чтение всех чисел из текстового файла
+    private static List<Double> readNumbers(String fileName) {
+        List<Double> list = new ArrayList<>();
+        try (BufferedReader br = new BufferedReader(new FileReader(fileName))) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                line = line.trim();
+                if (line.isEmpty() || line.startsWith("#")) continue;
+                for (String p : line.split("[,\\s]+")) {
+                    if (!p.isEmpty()) {
+                        list.add(Double.parseDouble(p.replace(',', '.')));
+                    }
+                }
+            }
+        } catch (IOException e) {
+            System.err.println("Ошибка чтения: " + e.getMessage());
+            return null;
+        }
+        return list;
     }
 }
